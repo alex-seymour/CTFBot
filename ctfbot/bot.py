@@ -18,5 +18,15 @@ class CTFBot:
                           format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN)''')
         self._db_conn.commit()
 
+    def _check_ctfs(self, ctf_data):
+        valid_ctfs = []
+
+        if ctf_data is not None:
+            for ctf in ctf_data:
+                if not ctf['onsite']:
+                    valid_ctfs.append(ctf)
+
+        return valid_ctfs
+
     def _send_message(self, message):
         self._hook.send(message)
