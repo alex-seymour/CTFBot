@@ -63,5 +63,63 @@ class CTFBot:
         ctf_data = self._get_ctfs()
         self._save_ctfs(ctf_data)
 
-    def _send_message(self, message):
-        self._hook.send(message)
+    def _send_message(self, message, colour, ctf=None, error=False, **kwargs):
+        embed = discord.Embed()
+        embed.colour = colour
+        embed.type = 'rich'
+
+        if not error and ctf is not None:
+            duration = ctf['duration'].split(':')
+
+            if duration[0] == '0':
+                duration = '{} hours'.format(duration[1])
+            else:
+                duration = '{0[0]} days {0[1]} hours'.format(duration)
+
+            embed.description = message
+            embed.set_author(name=ctf['name'], url=ctf['url'], icon_url=ctf['logo'])
+            embed.set_thumbnail(url=ctf['logo'])
+            embed.add_field(name='Duration', value=duration)
+
+            if 'start' in kwargs.keys():
+                local = kwargs['start'].astimezone(self._timezone).strftime('%H:%M, %d-%m-%Y')
+                embed.add_field(name='Start', value=local)
+
+            if 'finish' in kwargs.keys():
+                local = kwargs['finish'].astimezone(self._timezone).strftime('%H:%M, %d-%m-%Y')
+                embed.add_field(name='Finish', value=local)
+
+            embed.add_field(name='Format', value=ctf['format'])
+            embed.add_field(name='Details', value='[CTFtime]({})'.format(ctf['url']))
+        elif error:
+            embed.title = 'The beacons are lit! CTFBot calls for aid!'
+            embed.set_image(url='https://i.ytimg.com/vi/P6CBcE6PCwA/maxresdefault.jpg')
+            embed.set_footer(text=message)
+
+        self._hook.send(embed=embed)
+
+
+if __name__ == '__main__':
+    logger = logging.getLogger('ctfbot')
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(filename='/tmp/ctfbot.log', encoding='utf-8', mode='w')
+    handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+    logger.addHandler(handler)
+
+    last_update = None
+    bot = CTFBot('', logger)
+
+    while True:
+        try:
+            diff = (datetime.datetime.utcnow() - last_update)
+        except TypeError:
+            diff = None
+
+        if last_update is None or diff.days >= 1:
+            logging.info('Updating sources')
+            bot.update()
+            last_update = datetime.datetime.utcnow()
+
+        bot.notify()
+        logger.info('Sleeping')
+        time.sleep(3600)
