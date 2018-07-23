@@ -26,7 +26,7 @@ class CTFBot:
                 self._error_count = 0
 
             return self._check_ctfs(response.json())
-        elif self._error_count < 3:
+        elif self._error_count < 2:
             self._error_count += 1
         else:
             self._error_count = 0
