@@ -61,7 +61,9 @@ class CTFBot:
 
     def update(self):
         ctf_data = self._get_ctfs()
-        self._save_ctfs(ctf_data)
+
+        if ctf_data is not None:
+            self._save_ctfs(ctf_data)
 
     def _send_message(self, message, colour, ctf=None, error=False, **kwargs):
         embed = discord.Embed()
