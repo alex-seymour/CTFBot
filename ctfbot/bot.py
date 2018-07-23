@@ -1,12 +1,16 @@
 import time
 import sqlite3
 import datetime
+import logging
 import requests
 import discord
+import pytz
 
 class CTFBot:
-    def __init__(self, url):
+    def __init__(self, url, logger):
+        self._logger = logger
         self._error_count = 0
+        self._timezone = pytz.timezone('Europe/London')
         self._hook = discord.Webhook.from_url(url, adapter=discord.RequestsWebhookAdapter())
         self._ctftime_url = 'https://ctftime.org/api/v1/events/?limit=100&start={}'.format(int(time.time()))
         self._db_conn = sqlite3.connect('ctfs.dat')
@@ -14,7 +18,7 @@ class CTFBot:
 
         cursor = self._db_conn.cursor()
         cursor.execute('''CREATE TABLE IF NOT EXISTS events
-                          (ctftime_id INT, name TEXT, start TEXT, finish TEXT, duration TEXT,url TEXT, logo TEXT, 
+                          (ctftime_id INT, name TEXT, start TEXT, finish TEXT, duration TEXT, url TEXT, logo TEXT, 
                           format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN)''')
         self._db_conn.commit()
 
@@ -30,7 +34,7 @@ class CTFBot:
             self._error_count += 1
         else:
             self._error_count = 0
-            self._send_message('CTF Bot in distress!')
+            self._send_message('Unable to retrieve CTF data', 14099749, error=True)
 
     def _check_ctfs(self, ctf_data):
         valid_ctfs = []
@@ -56,6 +60,38 @@ class CTFBot:
                 cursor.execute('''INSERT INTO events
                                   VALUES(:id, :title, :start, :finish, "{}",:ctftime_url,
                                     :logo,:format, 0, 0, 0, 0)'''.format(duration), ctf)
+
+        self._db_conn.commit()
+
+    def notify(self):
+        date_format = '%Y-%m-%dT%H:%M:%S%z'
+        now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+        cursor = self._db_conn.cursor()
+        ctfs = cursor.execute('SELECT * FROM events WHERE ended = 0').fetchall()
+
+        for ctf in ctfs:
+            parameters = dict(id=ctf['ctftime_id'])
+            start = datetime.datetime.strptime(ctf['start'], date_format)
+            finish = datetime.datetime.strptime(ctf['finish'], date_format)
+
+            if start > now:
+                diff = start - now
+
+                if diff.days <= 1 and not ctf['day_alert']:
+                    self._logger.info('Sending 24 hour notification for {}'.format(ctf['name']))
+                    cursor.execute('UPDATE events SET day_alert = 1 WHERE ctftime_id = :id', parameters)
+                    self._send_message('This CTF is starting in 24 hours', 1992651, ctf, start=start, finish=finish)
+                elif diff.days <= 7 and not ctf['week_alert']:
+                    self._logger.info('Sending 1 week notification for {}'.format(ctf['name']))
+                    cursor.execute('UPDATE events SET week_alert = 1 WHERE ctftime_id = :id', parameters)
+                    self._send_message('This CTF is starting in 1 week', 16777215, ctf, start=start, finish=finish)
+            elif start < now < finish:
+                self._logger.info('Sending started notification for {}'.format(ctf['name']))
+                cursor.execute('UPDATE events SET started_alert = 1 WHERE ctftime_id = :id', parameters)
+                self._send_message('This CTF has started', 65317, ctf, start=start, finish=finish)
+            elif finish < now:
+                self._logger.info('Setting {} to finished'.format(ctf['name']))
+                cursor.execute('UPDATE events SET ended = 1 WHERE ctftime_id = :id', parameters)
 
         self._db_conn.commit()
 
