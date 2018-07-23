@@ -18,6 +18,20 @@ class CTFBot:
                           format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN)''')
         self._db_conn.commit()
 
+    def _get_ctfs(self):
+        response = requests.get(self._ctftime_url, headers={'User-Agent': 'python'})
+
+        if response.status_code == 200:
+            if self._error_count > 0:
+                self._error_count = 0
+
+            return self._check_ctfs(response.json())
+        elif self._error_count < 3:
+            self._error_count += 1
+        else:
+            self._error_count = 0
+            self._send_message('CTF Bot in distress!')
+
     def _check_ctfs(self, ctf_data):
         valid_ctfs = []
 
