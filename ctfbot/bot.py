@@ -18,3 +18,5 @@ class CTFBot:
                           format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN)''')
         self._db_conn.commit()
 
+    def _send_message(self, message):
+        self._hook.send(message)
