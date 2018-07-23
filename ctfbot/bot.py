@@ -42,5 +42,22 @@ class CTFBot:
 
         return valid_ctfs
 
+    def _save_ctfs(self, ctfs):
+        if len(ctfs) == 0:
+            return
+
+        cursor = self._db_conn.cursor()
+
+        for ctf in ctfs:
+            db_entry = cursor.execute('SELECT ctftime_id FROM events WHERE ctftime_id = {}'.format(ctf['id'])).fetchone()
+
+            if db_entry is None:
+                duration = '{}:{}'.format(ctf['duration']['days'], ctf['duration']['hours'])
+                cursor.execute('''INSERT INTO events
+                                  VALUES(:id, :title, :start, :finish, "{}",:ctftime_url,
+                                    :logo,:format, 0, 0, 0, 0)'''.format(duration), ctf)
+
+        self._db_conn.commit()
+
     def _send_message(self, message):
         self._hook.send(message)
