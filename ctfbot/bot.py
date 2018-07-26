@@ -77,7 +77,7 @@ class CTFBot:
             if start > now:
                 diff = start - now
 
-                if diff.days <= 1 and not ctf['day_alert']:
+                if diff.days < 1 and not ctf['day_alert']:
                     self._logger.info('Sending 24 hour notification for {}'.format(ctf['name']))
                     cursor.execute('UPDATE events SET day_alert = 1 WHERE ctftime_id = :id', parameters)
                     self._send_message('This CTF is starting in 24 hours', 1992651, ctf, start=start, finish=finish)
@@ -154,7 +154,7 @@ if __name__ == '__main__':
             diff = None
 
         if last_update is None or diff.days >= 1:
-            logging.info('Updating sources')
+            logger.info('Updating sources')
             bot.update()
             last_update = datetime.datetime.utcnow()
 
