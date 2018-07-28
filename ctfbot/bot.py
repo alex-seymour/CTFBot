@@ -85,7 +85,7 @@ class CTFBot:
                     self._logger.info('Sending 1 week notification for {}'.format(ctf['name']))
                     cursor.execute('UPDATE events SET week_alert = 1 WHERE ctftime_id = :id', parameters)
                     self._send_message('This CTF is starting in 1 week', 16777215, ctf, start=start, finish=finish)
-            elif start < now < finish:
+            elif start < now < finish and not ctf['started_alert']:
                 self._logger.info('Sending started notification for {}'.format(ctf['name']))
                 cursor.execute('UPDATE events SET started_alert = 1 WHERE ctftime_id = :id', parameters)
                 self._send_message('This CTF has started', 65317, ctf, start=start, finish=finish)
