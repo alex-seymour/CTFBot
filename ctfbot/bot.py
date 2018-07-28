@@ -1,14 +1,12 @@
 import time
 import sqlite3
 import datetime
-import logging
 import requests
 import discord
 import pytz
 
 class CTFBot:
-    def __init__(self, url, logger):
-        self._logger = logger
+    def __init__(self, url):
         self._error_count = 0
         self._timezone = pytz.timezone('Europe/London')
         self._hook = discord.Webhook.from_url(url, adapter=discord.RequestsWebhookAdapter())
@@ -36,7 +34,8 @@ class CTFBot:
             self._error_count = 0
             self._send_message('Unable to retrieve CTF data', 14099749, error=True)
 
-    def _check_ctfs(self, ctf_data):
+    @staticmethod
+    def _check_ctfs(ctf_data):
         valid_ctfs = []
 
         if ctf_data is not None:
@@ -53,7 +52,9 @@ class CTFBot:
         cursor = self._db_conn.cursor()
 
         for ctf in ctfs:
-            db_entry = cursor.execute('SELECT ctftime_id FROM events WHERE ctftime_id = {}'.format(ctf['id'])).fetchone()
+            db_entry = cursor.execute('SELECT ctftime_id '
+                                      'FROM events '
+                                      'WHERE ctftime_id = {}'.format(ctf['id'])).fetchone()
 
             if db_entry is None:
                 duration = '{}:{}'.format(ctf['duration']['days'], ctf['duration']['hours'])
@@ -78,19 +79,15 @@ class CTFBot:
                 diff = start - now
 
                 if diff.days < 1 and not ctf['day_alert']:
-                    self._logger.info('Sending 24 hour notification for {}'.format(ctf['name']))
                     cursor.execute('UPDATE events SET day_alert = 1 WHERE ctftime_id = :id', parameters)
                     self._send_message('This CTF is starting in 24 hours', 1992651, ctf, start=start, finish=finish)
                 elif diff.days <= 7 and not ctf['week_alert']:
-                    self._logger.info('Sending 1 week notification for {}'.format(ctf['name']))
                     cursor.execute('UPDATE events SET week_alert = 1 WHERE ctftime_id = :id', parameters)
                     self._send_message('This CTF is starting in 1 week', 16777215, ctf, start=start, finish=finish)
             elif start < now < finish and not ctf['started_alert']:
-                self._logger.info('Sending started notification for {}'.format(ctf['name']))
                 cursor.execute('UPDATE events SET started_alert = 1 WHERE ctftime_id = :id', parameters)
                 self._send_message('This CTF has started', 65317, ctf, start=start, finish=finish)
             elif finish < now:
-                self._logger.info('Setting {} to finished'.format(ctf['name']))
                 cursor.execute('UPDATE events SET ended = 1 WHERE ctftime_id = :id', parameters)
 
         self._db_conn.commit()
@@ -138,14 +135,8 @@ class CTFBot:
 
 
 if __name__ == '__main__':
-    logger = logging.getLogger('ctfbot')
-    logger.setLevel(logging.INFO)
-    handler = logging.FileHandler(filename='/tmp/ctfbot.log', encoding='utf-8', mode='w')
-    handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-    logger.addHandler(handler)
-
     last_update = None
-    bot = CTFBot('', logger)
+    bot = CTFBot('')
 
     while True:
         try:
@@ -154,10 +145,8 @@ if __name__ == '__main__':
             diff = None
 
         if last_update is None or diff.days >= 1:
-            logger.info('Updating sources')
             bot.update()
             last_update = datetime.datetime.utcnow()
 
         bot.notify()
-        logger.info('Sleeping')
         time.sleep(3600)
