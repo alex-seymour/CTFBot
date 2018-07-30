@@ -139,7 +139,7 @@ class CTFBot:
 
 if __name__ == '__main__':
     last_update = None
-    bot = CTFBot('https://discordapp.com/api/webhooks/473572845973274665/KLCJXH7CBPyHCwhzbYu_CKpXkgNfsenNM8CqojBc6uQl3EodjmxlHsh-IbH6rTHlqBZs')
+    bot = CTFBot('')
 
     while True:
         try:
