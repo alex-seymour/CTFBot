@@ -1,9 +1,12 @@
 import time
 import sqlite3
 import datetime
+from pathlib import Path
+
 import requests
 import discord
 import pytz
+
 
 class CTFBot:
     def __init__(self, url):
@@ -11,7 +14,7 @@ class CTFBot:
         self._timezone = pytz.timezone('Europe/London')
         self._hook = discord.Webhook.from_url(url, adapter=discord.RequestsWebhookAdapter())
         self._ctftime_url = 'https://ctftime.org/api/v1/events/?limit=100&start={}'.format(int(time.time()))
-        self._db_conn = sqlite3.connect('ctfs.dat')
+        self._db_conn = sqlite3.connect(Path(__file__).parent / 'ctfs.dat')
         self._db_conn.row_factory = sqlite3.Row
 
         cursor = self._db_conn.cursor()
@@ -136,7 +139,7 @@ class CTFBot:
 
 if __name__ == '__main__':
     last_update = None
-    bot = CTFBot('')
+    bot = CTFBot('https://discordapp.com/api/webhooks/473572845973274665/KLCJXH7CBPyHCwhzbYu_CKpXkgNfsenNM8CqojBc6uQl3EodjmxlHsh-IbH6rTHlqBZs')
 
     while True:
         try:
