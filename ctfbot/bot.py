@@ -1,10 +1,11 @@
 import time
 import sqlite3
-import datetime
+from datetime import datetime
 from pathlib import Path
 
 import requests
 import discord
+import schedule
 import pytz
 
 
@@ -22,6 +23,9 @@ class CTFBot:
                           (ctftime_id INT, name TEXT, start TEXT, finish TEXT, duration TEXT, url TEXT, logo TEXT, 
                           format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN)''')
         self._db_conn.commit()
+
+        self.update()
+        self.notify()
 
     def _get_ctfs(self):
         response = requests.get(self._ctftime_url, headers={'User-Agent': 'python'})
@@ -55,9 +59,9 @@ class CTFBot:
         cursor = self._db_conn.cursor()
 
         for ctf in ctfs:
-            db_entry = cursor.execute('''SELECT ctftime_id, start, finish
+            db_entry = cursor.execute('''SELECT *
                                       FROM events
-                                      WHERE ctftime_id = {}'''.format(ctf['id'])).fetchone()
+                                      WHERE ctftime_id = :id''', ctf).fetchone()
 
             if db_entry is None:
                 duration = '{}:{}'.format(ctf['duration']['days'], ctf['duration']['hours'])
@@ -67,26 +71,31 @@ class CTFBot:
             else:
                 if db_entry['start'] != ctf['start']:
                     cursor.execute('''UPDATE events
-                                      SET start = "{}"
-                                      WHERE ctftime_id = {}'''.format(ctf['start'], db_entry['ctftime_id']))
+                                      SET start = :start
+                                      WHERE ctftime_id = :id''', ctf)
 
                 if db_entry['finish'] != ctf['finish']:
                     cursor.execute('''UPDATE events
-                                      SET finish = "{}"
-                                      WHERE ctftime_id = {}'''.format(ctf['finish'], db_entry['ctftime_id']))
+                                      SET finish = :finish
+                                      WHERE ctftime_id = :id''', ctf)
+
+                if db_entry['logo'] != ctf['logo']:
+                    cursor.execute('''UPDATE events
+                                      SET logo = :logo
+                                      WHERE ctftime_id = :id''', ctf)
 
         self._db_conn.commit()
 
     def notify(self):
         date_format = '%Y-%m-%dT%H:%M:%S%z'
-        now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+        now = datetime.utcnow().replace(tzinfo=pytz.utc)
         cursor = self._db_conn.cursor()
         ctfs = cursor.execute('SELECT * FROM events WHERE ended = 0').fetchall()
 
         for ctf in ctfs:
             parameters = dict(id=ctf['ctftime_id'])
-            start = datetime.datetime.strptime(ctf['start'], date_format)
-            finish = datetime.datetime.strptime(ctf['finish'], date_format)
+            start = datetime.strptime(ctf['start'], date_format)
+            finish = datetime.strptime(ctf['finish'], date_format)
 
             if start > now:
                 diff = start - now
@@ -96,7 +105,7 @@ class CTFBot:
                     self._send_message('This CTF is starting in 24 hours', 1992651, ctf, start=start, finish=finish)
                 elif diff.days <= 7 and not ctf['week_alert']:
                     cursor.execute('UPDATE events SET week_alert = 1 WHERE ctftime_id = :id', parameters)
-                    self._send_message('This CTF is starting in 1 week', 16777215, ctf, start=start, finish=finish)
+                    self._send_message('This CTF is starting in {} days'.format(diff.days), 16777215, ctf, start=start, finish=finish)
             elif start < now < finish and not ctf['started_alert']:
                 cursor.execute('UPDATE events SET started_alert = 1 WHERE ctftime_id = :id', parameters)
                 self._send_message('This CTF has started', 65317, ctf, start=start, finish=finish)
@@ -110,6 +119,19 @@ class CTFBot:
 
         if ctf_data is not None:
             self._save_ctfs(ctf_data)
+
+    def clear_db(self):
+        now = datetime.now()
+
+        if now.day == 1:
+            cursor = self._db_conn.cursor()
+            ctfs = cursor.execute('SELECT ctftime_id FROM events WHERE ended = 1').fetchall()
+
+            if len(ctfs) > 0:
+                for ctf in ctfs:
+                    cursor.execute('DELETE FROM events WHERE ctftime_id = :ctftime_id', ctf)
+
+                self._db_conn.commit()
 
     def _send_message(self, message, colour, ctf=None, error=False, **kwargs):
         embed = discord.Embed()
@@ -151,15 +173,10 @@ if __name__ == '__main__':
     last_update = None
     bot = CTFBot('')
 
+    schedule.every().day.at('00:00').do(bot.update)
+    schedule.every().day.at('00:00').do(bot.clear_db)
+    schedule.every().hour.at(':01').do(bot.notify)
+
     while True:
-        try:
-            diff = (datetime.datetime.utcnow() - last_update)
-        except TypeError:
-            diff = None
-
-        if last_update is None or diff.days >= 1:
-            bot.update()
-            last_update = datetime.datetime.utcnow()
-
-        bot.notify()
-        time.sleep(3600)
+        schedule.run_pending()
+        time.sleep(1)
