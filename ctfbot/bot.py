@@ -103,7 +103,7 @@ class CTFBot:
                 if diff.days < 1 and not ctf['day_alert']:
                     cursor.execute('UPDATE events SET day_alert = 1 WHERE ctftime_id = :id', parameters)
                     self._send_message('This CTF is starting in 24 hours', 1992651, ctf, start=start, finish=finish)
-                elif diff.days <= 7 and not ctf['week_alert']:
+                elif 7 >= diff.days > 0 and not ctf['week_alert']:
                     cursor.execute('UPDATE events SET week_alert = 1 WHERE ctftime_id = :id', parameters)
                     self._send_message('This CTF is starting in {} days'.format(diff.days), 16777215, ctf, start=start, finish=finish)
             elif start < now < finish and not ctf['started_alert']:
