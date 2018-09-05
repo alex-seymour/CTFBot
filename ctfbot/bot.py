@@ -1,6 +1,6 @@
 import time
 import sqlite3
-import datetime
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -23,6 +23,9 @@ class CTFBot:
                           (ctftime_id INT, name TEXT, start TEXT, finish TEXT, duration TEXT, url TEXT, logo TEXT, 
                           format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN)''')
         self._db_conn.commit()
+
+        self.update()
+        self.notify()
 
     def _get_ctfs(self):
         response = requests.get(self._ctftime_url, headers={'User-Agent': 'python'})
