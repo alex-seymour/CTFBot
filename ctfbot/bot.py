@@ -59,9 +59,9 @@ class CTFBot:
         cursor = self._db_conn.cursor()
 
         for ctf in ctfs:
-            db_entry = cursor.execute('''SELECT ctftime_id, start, finish
+            db_entry = cursor.execute('''SELECT *
                                       FROM events
-                                      WHERE ctftime_id = {}'''.format(ctf['id'])).fetchone()
+                                      WHERE ctftime_id = :id''', ctf).fetchone()
 
             if db_entry is None:
                 duration = '{}:{}'.format(ctf['duration']['days'], ctf['duration']['hours'])
@@ -71,31 +71,31 @@ class CTFBot:
             else:
                 if db_entry['start'] != ctf['start']:
                     cursor.execute('''UPDATE events
-                                      SET start = "{}"
-                                      WHERE ctftime_id = {}'''.format(ctf['start'], ctf['id']))
+                                      SET start = :start
+                                      WHERE ctftime_id = :id''', ctf)
 
                 if db_entry['finish'] != ctf['finish']:
                     cursor.execute('''UPDATE events
-                                      SET finish = "{}"
-                                      WHERE ctftime_id = {}'''.format(ctf['finish'], ctf['id']))
+                                      SET finish = :finish
+                                      WHERE ctftime_id = :id''', ctf)
 
                 if db_entry['logo'] != ctf['logo']:
                     cursor.execute('''UPDATE events
-                                      SET logo = "{}"
-                                      WHERE ctftime_id = {}'''.format(ctf['logo'], ctf['id']))
+                                      SET logo = :logo
+                                      WHERE ctftime_id = :id''', ctf)
 
         self._db_conn.commit()
 
     def notify(self):
         date_format = '%Y-%m-%dT%H:%M:%S%z'
-        now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+        now = datetime.utcnow().replace(tzinfo=pytz.utc)
         cursor = self._db_conn.cursor()
         ctfs = cursor.execute('SELECT * FROM events WHERE ended = 0').fetchall()
 
         for ctf in ctfs:
             parameters = dict(id=ctf['ctftime_id'])
-            start = datetime.datetime.strptime(ctf['start'], date_format)
-            finish = datetime.datetime.strptime(ctf['finish'], date_format)
+            start = datetime.strptime(ctf['start'], date_format)
+            finish = datetime.strptime(ctf['finish'], date_format)
 
             if start > now:
                 diff = start - now
