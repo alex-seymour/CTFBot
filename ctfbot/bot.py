@@ -56,15 +56,25 @@ class CTFBot:
         cursor = self._db_conn.cursor()
 
         for ctf in ctfs:
-            db_entry = cursor.execute('SELECT ctftime_id '
-                                      'FROM events '
-                                      'WHERE ctftime_id = {}'.format(ctf['id'])).fetchone()
+            db_entry = cursor.execute('''SELECT ctftime_id, start, finish
+                                      FROM events
+                                      WHERE ctftime_id = {}'''.format(ctf['id'])).fetchone()
 
             if db_entry is None:
                 duration = '{}:{}'.format(ctf['duration']['days'], ctf['duration']['hours'])
                 cursor.execute('''INSERT INTO events
                                   VALUES(:id, :title, :start, :finish, "{}",:ctftime_url,
                                     :logo,:format, 0, 0, 0, 0)'''.format(duration), ctf)
+            else:
+                if db_entry['start'] != ctf['start']:
+                    cursor.execute('''UPDATE events
+                                      SET start = "{}"
+                                      WHERE ctftime_id = {}'''.format(ctf['start'], db_entry['ctftime_id']))
+
+                if db_entry['finish'] != ctf['finish']:
+                    cursor.execute('''UPDATE events
+                                      SET finish = "{}"
+                                      WHERE ctftime_id = {}'''.format(ctf['finish'], db_entry['ctftime_id']))
 
         self._db_conn.commit()
 
