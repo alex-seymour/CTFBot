@@ -6,4 +6,6 @@ Three types of notification are posted for each CTF, one is posted a week before
 ## Setup
 * Create a webhook for the Discord channel you want the bot to post notifications to
 * Clone the repository ``git clone https://github.com/LucidUnicorn/CTFBot``
+* Install the necessary requirements ``pip install -r requirements.txt``
 * Modify bot.py and add the hook URL ``bot = CTFBot('https://your.discord.hook.url.here')``
+* Run the bot ``python bot.py``
