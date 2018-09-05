@@ -120,6 +120,19 @@ class CTFBot:
         if ctf_data is not None:
             self._save_ctfs(ctf_data)
 
+    def clear_db(self):
+        now = datetime.now()
+
+        if now.day == 1:
+            cursor = self._db_conn.cursor()
+            ctfs = cursor.execute('SELECT ctftime_id FROM events WHERE ended = 1').fetchall()
+
+            if len(ctfs) > 0:
+                for ctf in ctfs:
+                    cursor.execute('DELETE FROM events WHERE ctftime_id = :ctftime_id', ctf)
+
+                self._db_conn.commit()
+
     def _send_message(self, message, colour, ctf=None, error=False, **kwargs):
         embed = discord.Embed()
         embed.colour = colour
@@ -161,6 +174,7 @@ if __name__ == '__main__':
     bot = CTFBot('')
 
     schedule.every().day.at('00:00').do(bot.update)
+    schedule.every().day.at('00:00').do(bot.clear_db)
     schedule.every().hour.at(':01').do(bot.notify)
 
     while True:
