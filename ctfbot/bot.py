@@ -5,6 +5,7 @@ from pathlib import Path
 
 import requests
 import discord
+import schedule
 import pytz
 
 
@@ -141,15 +142,9 @@ if __name__ == '__main__':
     last_update = None
     bot = CTFBot('')
 
+    schedule.every().day.do(bot.update)
+    schedule.every().hour.do(bot.notify)
+
     while True:
-        try:
-            diff = (datetime.datetime.utcnow() - last_update)
-        except TypeError:
-            diff = None
-
-        if last_update is None or diff.days >= 1:
-            bot.update()
-            last_update = datetime.datetime.utcnow()
-
-        bot.notify()
-        time.sleep(3600)
+        schedule.run_pending()
+        time.sleep(1)
