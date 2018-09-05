@@ -69,12 +69,17 @@ class CTFBot:
                 if db_entry['start'] != ctf['start']:
                     cursor.execute('''UPDATE events
                                       SET start = "{}"
-                                      WHERE ctftime_id = {}'''.format(ctf['start'], db_entry['ctftime_id']))
+                                      WHERE ctftime_id = {}'''.format(ctf['start'], ctf['id']))
 
                 if db_entry['finish'] != ctf['finish']:
                     cursor.execute('''UPDATE events
                                       SET finish = "{}"
-                                      WHERE ctftime_id = {}'''.format(ctf['finish'], db_entry['ctftime_id']))
+                                      WHERE ctftime_id = {}'''.format(ctf['finish'], ctf['id']))
+
+                if db_entry['logo'] != ctf['logo']:
+                    cursor.execute('''UPDATE events
+                                      SET logo = "{}"
+                                      WHERE ctftime_id = {}'''.format(ctf['logo'], ctf['id']))
 
         self._db_conn.commit()
 
