@@ -157,8 +157,8 @@ if __name__ == '__main__':
     last_update = None
     bot = CTFBot('')
 
-    schedule.every().day.do(bot.update)
-    schedule.every().hour.do(bot.notify)
+    schedule.every().day.at('00:00').do(bot.update)
+    schedule.every().hour.at(':01').do(bot.notify)
 
     while True:
         schedule.run_pending()
