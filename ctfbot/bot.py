@@ -114,20 +114,20 @@ class CTFBot:
 
         for ctf in ctfs:
             events_by_id[ctf['ctftime_id']] = ctf
+            cursor.execute('UPDATE events SET results_last_checked = ? WHERE ctftime_id = ?',
+                           (datetime.utcnow().strftime(date_format), ctf['ctftime_id']))
 
         for event_id in results_data.keys():
             if int(event_id) in events_by_id.keys():
                 for score in results_data[event_id]['score']:
                     if score['team_id'] == self.team_id:
-                        cursor.execute('UPDATE events SET results_posted = 1 WHERE ctftime_id = ?', event_id)
-                        self._db_conn.commit()
                         self._send_message('Your team competed in this CTF', 14681067, events_by_id[event_id],
                                            result=True, ctf_result=score)
                         break
 
-                    cursor.execute('UPDATE events SET results_last_checked = ? WHERE ctftime_id = ?',
-                                   (datetime.utcnow().strftime(date_format), event_id))
-                    self._db_conn.commit()
+                cursor.execute('UPDATE events SET results_posted = 1 WHERE ctftime_id = ?', event_id)
+
+        self._db_conn.commit()
 
     def notify(self):
         date_format = '%Y-%m-%dT%H:%M:%S%z'
