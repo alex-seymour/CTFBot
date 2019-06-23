@@ -25,11 +25,13 @@ class CTFBot:
         cursor = self._db_conn.cursor()
         cursor.execute('''CREATE TABLE IF NOT EXISTS events
                           (ctftime_id INT, name TEXT, start TEXT, finish TEXT, duration TEXT, url TEXT, logo TEXT, 
-                          format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN)''')
+                          format TEXT, week_alert BOOLEAN, day_alert BOOLEAN, started_alert BOOLEAN, ended BOOLEAN,
+                          results_posted BOOLEAN, results_last_checked TEXT)''')
         self._db_conn.commit()
 
         self.update()
         self.notify()
+        self.check_results()
 
     def _get_ctfs(self):
         response = requests.get(f'{self._ctftime_url}/events/?limit=100&start={int(time.time())}',
@@ -72,7 +74,7 @@ class CTFBot:
                 duration = '{}:{}'.format(ctf['duration']['days'], ctf['duration']['hours'])
                 cursor.execute('''INSERT INTO events
                                   VALUES(:id, :title, :start, :finish, "{}",:ctftime_url,
-                                    :logo,:format, 0, 0, 0, 0)'''.format(duration), ctf)
+                                    :logo,:format, 0, 0, 0, 0, 0, "")'''.format(duration), ctf)
             else:
                 if db_entry['start'] != ctf['start']:
                     cursor.execute('''UPDATE events
@@ -91,29 +93,41 @@ class CTFBot:
 
         self._db_conn.commit()
 
-    def _get_team_participation(self, ctf):
+    def _get_team_participation(self, ctfs):
         response = requests.get(f'{self._ctftime_url}/results/', headers={'User-Agent': 'python'})
 
         if response.status_code == 200:
             if self._error_count > 0:
                 self._error_count = 0
 
-            self._check_team_participation(response.json(), ctf)
+            self._check_team_participation(response.json(), ctfs)
         elif self._error_count < self._error_limit:
             self._error_count += 1
         else:
             self._error_count = 0
             self._send_message('Unable to retrieve team participation data', 14099749, error=True)
 
-    def _check_team_participation(self, results_data, ctf):
-        for event in results_data.keys():
-            if event == ctf['id']:
-                for score in results_data[event]['scores']:
+    def _check_team_participation(self, results_data, ctfs):
+        events_by_id = dict()
+        date_format = '%Y-%m-%dT%H:%M:%S%z'
+        cursor = self._db_conn.cursor()
+
+        for ctf in ctfs:
+            events_by_id[ctf['ctftime_id']] = ctf
+
+        for event_id in results_data.keys():
+            if int(event_id) in events_by_id.keys():
+                for score in results_data[event_id]['score']:
                     if score['team_id'] == self.team_id:
-                        self._send_message('Your team competed in this CTF', 14681067, ctf,
+                        cursor.execute('UPDATE events SET results_posted = 1 WHERE ctftime_id = ?', event_id)
+                        self._db_conn.commit()
+                        self._send_message('Your team competed in this CTF', 14681067, events_by_id[event_id],
                                            result=True, ctf_result=score)
-                        return
-                return
+                        break
+
+                    cursor.execute('UPDATE events SET results_last_checked = ? WHERE ctftime_id = ?',
+                                   (datetime.utcnow().strftime(date_format), event_id))
+                    self._db_conn.commit()
 
     def notify(self):
         date_format = '%Y-%m-%dT%H:%M:%S%z'
@@ -134,15 +148,20 @@ class CTFBot:
                     self._send_message('This CTF is starting in 24 hours', 1992651, ctf, start=start, finish=finish)
                 elif 7 >= diff.days > 0 and not ctf['week_alert']:
                     cursor.execute('UPDATE events SET week_alert = 1 WHERE ctftime_id = :id', parameters)
-                    self._send_message('This CTF is starting in {} days'.format(diff.days), 16777215, ctf, start=start, finish=finish)
+                    self._send_message('This CTF is starting in {} days'.format(diff.days), 16777215, ctf, start=start,
+                                       finish=finish)
             elif start < now < finish and not ctf['started_alert']:
                 cursor.execute('UPDATE events SET started_alert = 1 WHERE ctftime_id = :id', parameters)
                 self._send_message('This CTF has started', 65317, ctf, start=start, finish=finish)
             elif finish < now:
                 cursor.execute('UPDATE events SET ended = 1 WHERE ctftime_id = :id', parameters)
-                self._get_team_participation(ctf)
 
         self._db_conn.commit()
+
+    def check_results(self):
+        cursor = self._db_conn.cursor()
+        ctfs = cursor.execute('SELECT * FROM events WHERE ended = 1 AND results_posted = 0')
+        self._get_team_participation(ctfs)
 
     def update(self):
         ctf_data = self._get_ctfs()
@@ -152,6 +171,7 @@ class CTFBot:
 
     def clear_db(self):
         now = datetime.now()
+        date_format = '%Y-%m-%dT%H:%M:%S%z'
 
         if now.day == 1:
             cursor = self._db_conn.cursor()
@@ -159,7 +179,11 @@ class CTFBot:
 
             if len(ctfs) > 0:
                 for ctf in ctfs:
-                    cursor.execute('DELETE FROM events WHERE ctftime_id = :ctftime_id', ctf)
+                    results_last_checked = datetime.strptime(ctf['results_last_checked'], date_format)
+                    event_finished = datetime.strptime(ctf['finish'], date_format)
+
+                    if ctf['results_posted'] or (results_last_checked - event_finished).days > 60:
+                        cursor.execute('DELETE FROM events WHERE ctftime_id = :ctftime_id', ctf)
 
                 self._db_conn.commit()
 
@@ -219,6 +243,7 @@ if __name__ == '__main__':
     bot = CTFBot(configuration)
     schedule.every().day.at('00:00').do(bot.update)
     schedule.every().day.at('00:00').do(bot.clear_db)
+    schedule.every().day.at('12:00').do(bot.check_results)
     schedule.every().hour.at(':01').do(bot.notify)
 
     while True:
