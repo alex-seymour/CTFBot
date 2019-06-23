@@ -179,6 +179,9 @@ class CTFBot:
 
             if len(ctfs) > 0:
                 for ctf in ctfs:
+                    if len(ctf['results_last_checked']) == 0:
+                        continue
+
                     results_last_checked = datetime.strptime(ctf['results_last_checked'], date_format)
                     event_finished = datetime.strptime(ctf['finish'], date_format)
 
