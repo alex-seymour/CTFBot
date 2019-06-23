@@ -1,3 +1,4 @@
+import json
 import time
 import sqlite3
 from datetime import datetime
@@ -10,11 +11,14 @@ import pytz
 
 
 class CTFBot:
-    def __init__(self, url):
+    def __init__(self, config):
         self._error_count = 0
+        self._error_limit = 2
         self._timezone = pytz.timezone('Europe/London')
-        self._hook = discord.Webhook.from_url(url, adapter=discord.RequestsWebhookAdapter())
-        self._ctftime_url = 'https://ctftime.org/api/v1/events/?limit=100&start={}'.format(int(time.time()))
+        self._event_hook = discord.Webhook.from_url(config.get('notify_hook'), adapter=discord.RequestsWebhookAdapter())
+        self._result_hook = discord.Webhook.from_url(config.get('result_hook'), adapter=discord.RequestsWebhookAdapter())
+        self._ctftime_url = 'https://ctftime.org/api/v1'
+        self.team_id = int(config.get('team_id'))
         self._db_conn = sqlite3.connect(Path(__file__).parent / 'ctfs.dat')
         self._db_conn.row_factory = sqlite3.Row
 
@@ -28,14 +32,15 @@ class CTFBot:
         self.notify()
 
     def _get_ctfs(self):
-        response = requests.get(self._ctftime_url, headers={'User-Agent': 'python'})
+        response = requests.get(f'{self._ctftime_url}/events/?limit=100&start={int(time.time())}',
+                                headers={'User-Agent': 'python'})
 
         if response.status_code == 200:
             if self._error_count > 0:
                 self._error_count = 0
 
             return self._check_ctfs(response.json())
-        elif self._error_count < 2:
+        elif self._error_count < self._error_limit:
             self._error_count += 1
         else:
             self._error_count = 0
@@ -86,6 +91,30 @@ class CTFBot:
 
         self._db_conn.commit()
 
+    def _get_team_participation(self, ctf):
+        response = requests.get(f'{self._ctftime_url}/results/', headers={'User-Agent': 'python'})
+
+        if response.status_code == 200:
+            if self._error_count > 0:
+                self._error_count = 0
+
+            self._check_team_participation(response.json(), ctf)
+        elif self._error_count < self._error_limit:
+            self._error_count += 1
+        else:
+            self._error_count = 0
+            self._send_message('Unable to retrieve team participation data', 14099749, error=True)
+
+    def _check_team_participation(self, results_data, ctf):
+        for event in results_data.keys():
+            if event == ctf['id']:
+                for score in results_data[event]['scores']:
+                    if score['team_id'] == self.team_id:
+                        self._send_message('Your team competed in this CTF', 14681067, ctf,
+                                           result=True, ctf_result=score)
+                        return
+                return
+
     def notify(self):
         date_format = '%Y-%m-%dT%H:%M:%S%z'
         now = datetime.utcnow().replace(tzinfo=pytz.utc)
@@ -111,6 +140,7 @@ class CTFBot:
                 self._send_message('This CTF has started', 65317, ctf, start=start, finish=finish)
             elif finish < now:
                 cursor.execute('UPDATE events SET ended = 1 WHERE ctftime_id = :id', parameters)
+                self._get_team_participation(ctf)
 
         self._db_conn.commit()
 
@@ -133,12 +163,12 @@ class CTFBot:
 
                 self._db_conn.commit()
 
-    def _send_message(self, message, colour, ctf=None, error=False, **kwargs):
+    def _send_message(self, message, colour, ctf=None, error=False, result=False, ctf_result=None, **kwargs):
         embed = discord.Embed()
         embed.colour = colour
         embed.type = 'rich'
 
-        if not error and ctf is not None:
+        if not error and not result and ctf is not None:
             duration = ctf['duration'].split(':')
 
             if duration[0] == '0':
@@ -161,18 +191,32 @@ class CTFBot:
 
             embed.add_field(name='Format', value=ctf['format'])
             embed.add_field(name='Details', value='[CTFtime]({})'.format(ctf['url']))
+        elif result:
+            embed.description = message
+            embed.set_author(name=ctf['name'], url=ctf['url'], icon_url=ctf['logo'])
+            embed.set_thumbnail(url=ctf['logo'])
+            embed.add_field(name='Score', value=ctf_result['points'][:ctf_result['points'].rfind('.')])
+            embed.add_field(name='Position', value=ctf_result['place'])
         elif error:
             embed.title = 'The beacons are lit! CTFBot calls for aid!'
             embed.set_image(url='https://i.ytimg.com/vi/P6CBcE6PCwA/maxresdefault.jpg')
             embed.set_footer(text=message)
 
-        self._hook.send(embed=embed)
+        self._event_hook.send(embed=embed)
 
 
 if __name__ == '__main__':
     last_update = None
-    bot = CTFBot('')
+    config_file = Path(__file__).parent / 'config.json'
 
+    if not config_file.is_file:
+        print('No config file found')
+        exit()
+    else:
+        with config_file.open('r') as file:
+            configuration = json.load(file)
+
+    bot = CTFBot(configuration)
     schedule.every().day.at('00:00').do(bot.update)
     schedule.every().day.at('00:00').do(bot.clear_db)
     schedule.every().hour.at(':01').do(bot.notify)
